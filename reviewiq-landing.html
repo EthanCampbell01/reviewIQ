@@ -558,6 +558,17 @@ h1 .strike::after {
 .feature-card h3 { font-size:17px; font-weight:700; margin-bottom:10px; }
 .feature-card p { font-size:13px; color:var(--muted); line-height:1.7; }
 
+
+.roadmap-section{position:relative;z-index:1;padding:80px 48px;max-width:1000px;margin:0 auto;}
+.roadmap-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:2px;margin-top:38px;}
+@media(max-width:700px){.roadmap-grid{grid-template-columns:1fr;}}
+.roadmap-card{background:var(--surface);border:1px solid var(--border);padding:24px;}
+.roadmap-card h3{font-size:16px;margin-bottom:10px;}
+.roadmap-card p{font-size:13px;color:var(--muted);line-height:1.7;}
+.inline-cta{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
+.inline-link{font-family:'JetBrains Mono', monospace;font-size:11px;color:var(--green);text-decoration:none;border:1px solid rgba(16,214,119,.28);padding:8px 12px;border-radius:6px;}
+.inline-link:hover{background:rgba(16,214,119,.09);}
+
 /* ── PRICING ── */
 .pricing-section {
   position:relative; z-index:1;
@@ -939,6 +950,30 @@ footer {
       <span class="feature-icon">🏪</span>
       <h3>Multi-Platform</h3>
       <p>Amazon US, UK, DE, and more. Coming soon: Walmart, Etsy, and Shopify reviews — one dashboard for your entire competitive landscape.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ROADMAP -->
+<section class="roadmap-section fade-in">
+  <div class="section-label">// Build Status</div>
+  <h2 class="section-title">Now shipping the full system</h2>
+  <div class="roadmap-grid">
+    <div class="roadmap-card">
+      <h3>✅ Built this week</h3>
+      <p>Landing page, live demo animation, full dashboard UI, report explorer, ASIN compare mode, copy generator, alert rules, API key settings, and local persistence are now running.</p>
+      <div class="inline-cta">
+        <a class="inline-link" href="reviewiq-app.html" target="_blank">Open Dashboard Demo ↗</a>
+        <a class="inline-link" href="reviewiq-business-plan.html" target="_blank">Open Business Plan ↗</a>
+      </div>
+    </div>
+    <div class="roadmap-card">
+      <h3>🚀 Shipping next</h3>
+      <p>Stripe checkout wiring, onboarding wizard, email digest automation, and Supabase-backed accounts so teams can collaborate on one workspace.</p>
+      <div class="inline-cta">
+        <a class="inline-link" href="#" onclick="document.getElementById('cta-email').focus();return false;">Join Beta Queue</a>
+      </div>
     </div>
   </div>
 </section>
