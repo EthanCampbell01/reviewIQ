@@ -277,7 +277,7 @@ textarea.form-input{resize:vertical;min-height:110px;font-size:12px;line-height:
 
 <script>
 // ── CONFIG ──
-let CFG={anthropicKey:'',scrapingKey:'',stripeKey:'',backendBase:'',backendToken:'',scrapingEndpoint:'https://api.scrapingdog.com/amazon/reviews',emailAlerts:true,weeklyDigest:true,slackAlerts:false,alertThreshold:10};
+let CFG={anthropicKey:'',scrapingKey:'',stripeKey:'',scrapingEndpoint:'https://api.scrapingdog.com/amazon/reviews',emailAlerts:true,weeklyDigest:true,slackAlerts:false,alertThreshold:10};
 function loadCFG(){try{const s=localStorage.getItem('riq_cfg');if(s)CFG={...CFG,...JSON.parse(s)};}catch(e){}}
 function saveCFG(){localStorage.setItem('riq_cfg',JSON.stringify(CFG));}
 function hasKeys(){return!!(CFG.anthropicKey&&CFG.scrapingKey);}
@@ -636,15 +636,6 @@ function renderSettings(){
           <input id="k-st" class="form-input" type="password" placeholder="pk_live_..." value="${CFG.stripeKey||''}">
           <div style="font-size:11px;color:var(--muted);margin-top:6px;">Optional now. Required to switch checkout from demo to live.</div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Backend API Base URL</label>
-          <input id="k-be" class="form-input" placeholder="https://your-app.up.railway.app" value="${CFG.backendBase||''}">
-          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Recommended for production. Routes live scraping, Claude calls, and waitlist capture through your server.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Backend API Token (optional)</label>
-          <input id="k-bet" class="form-input" type="password" placeholder="Bearer token for your API" value="${CFG.backendToken||''}">
-        </div>
         <button class="btn-primary" onclick="saveKeys()">Save API Keys</button>
         ${hasKeys()?`<button class="btn-danger" style="margin-left:10px;" onclick="clearKeys()">Clear</button>`:''}
         ${hasKeys()?`<span style="color:var(--green);font-size:13px;margin-left:12px;">✓ Live mode active</span>`:`<span style="color:var(--amber);font-size:13px;margin-left:12px;">⚡ Demo mode</span>`}
@@ -671,13 +662,11 @@ function saveKeys(){
   CFG.anthropicKey=document.getElementById('k-ant').value.trim();
   CFG.scrapingKey=document.getElementById('k-sc').value.trim();
   CFG.stripeKey=(document.getElementById('k-st')?.value||'').trim();
-  CFG.backendBase=(document.getElementById('k-be')?.value||'').trim();
-  CFG.backendToken=(document.getElementById('k-bet')?.value||'').trim();
   BIZ.stripeReady=CFG.stripeKey.startsWith('pk_');
   saveCFG(); saveBiz(); renderSettings();
   toast(hasKeys()?'✓ API keys saved — live mode active':'Keys saved (add both keys to enable live mode)');
 }
-function clearKeys(){CFG.anthropicKey='';CFG.scrapingKey='';CFG.stripeKey='';CFG.backendBase='';CFG.backendToken='';BIZ.stripeReady=false;saveCFG();saveBiz();renderSettings();toast('Keys cleared');}
+function clearKeys(){CFG.anthropicKey='';CFG.scrapingKey='';CFG.stripeKey='';BIZ.stripeReady=false;saveCFG();saveBiz();renderSettings();toast('Keys cleared');}
 function exportAll(){
   const rows=[['ASIN','Nickname','Reviews','Score','Top Complaint','Top Praise','Last Run']];
   asins.forEach(a=>rows.push([a.asin,a.nick,a.reviews,a.score||'',a.report?.complaints[0]?.label||'',a.report?.praise[0]?.label||'',a.lastRun]));
