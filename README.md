@@ -24,6 +24,8 @@ Paste a competitor's ASIN → ReviewIQ pulls every review → Claude AI clusters
 |------|-------------|
 | `reviewiq-app.html` | Full dashboard application — all pages, live analysis engine |
 | `reviewiq-landing.html` | Marketing landing page with animated demo and email capture |
+| `backend/server.js` | Express API for Railway/production proxy (scrape, analyze, copy, waitlist) |
+| `backend/RAILWAY.md` | Step-by-step Railway deployment guide for the backend service |
 
 ---
 
@@ -100,6 +102,25 @@ Dashboard Report  (animated charts, CSV export)
 See the [full business plan](./BUSINESS_PLAN.md) for revenue projections and go-to-market strategy.
 
 ---
+
+
+## Railway Backend (Recommended for production)
+
+A ready-to-deploy backend is included under `backend/` so API keys stay server-side.
+
+### Quick start
+
+```bash
+cd backend
+npm install
+npm start
+```
+
+Then set in the app Settings:
+- **Backend API Base URL** (`https://<your-railway-service>.up.railway.app`)
+- **Backend API Token** (if you configured `BACKEND_TOKEN`)
+
+See full deploy steps in [`backend/RAILWAY.md`](./backend/RAILWAY.md).
 
 ## Demo Mode
 
