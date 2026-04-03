@@ -281,6 +281,9 @@ let CFG={anthropicKey:'',scrapingKey:'',stripeKey:'',scrapingEndpoint:'https://a
 function loadCFG(){try{const s=localStorage.getItem('riq_cfg');if(s)CFG={...CFG,...JSON.parse(s)};}catch(e){}}
 function saveCFG(){localStorage.setItem('riq_cfg',JSON.stringify(CFG));}
 function hasKeys(){return!!(CFG.anthropicKey&&CFG.scrapingKey);}
+function hasBackend(){return!!CFG.backendBase.trim();}
+function apiURL(path){return CFG.backendBase.replace(/\/$/,'')+path;}
+function apiHeaders(){const h={'Content-Type':'application/json'};if(CFG.backendToken)h.Authorization='Bearer '+CFG.backendToken;return h;}
 
 // ── SEED DATA ──
 const SEED=[
@@ -482,11 +485,17 @@ async function genCopy(){
   const prompt=`You are an expert Amazon listing copywriter. Write ${types[type]} for this product.\n\nTone: ${tones[tone]}\nBrief: ${brief}\n\n${instr[type]}\n\nReturn ONLY the copy. No preamble or explanation.`;
   try{
     let text='';
-    if(hasKeys()){
-      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    if(hasBackend()){
+      const r=await fetch(apiURL('/api/copy/generate'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({brief,tone,type,prompt})});
+      if(!r.ok) throw new Error('Backend error '+r.status);
+      const d=await r.json();
+      text=d.text||d.output||'';
+      if(!text) throw new Error('No copy returned by backend');
+    } else if(hasKeys()){
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.anthropicKey,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
       if(!r.ok) throw new Error('API error '+r.status);
       const d=await r.json();
-      text=d.content[0].text;
+      text=d.content?.[0]?.text||'';
     } else {
       await new Promise(r=>setTimeout(r,1800));
       text=type==='bullets'?`• LEAK-PROOF GUARANTEE — Quad-seal lid tested to 1,000+ cycles. Your bag stays dry.\n• TRUE 40OZ CAPACITY — Independently measured. No inflated numbers. What it says, it holds.\n• 36-HOUR COLD RETENTION — Double-wall vacuum tested in-house. Not a marketing estimate.\n• SLIM CUP HOLDER FIT — Tapered to fit 99% of standard holders. Drive, gym, stroller ready.\n• LIFETIME COATING WARRANTY — Military-grade powder coat at 2x thickness. Chips covered, forever.`
@@ -764,7 +773,7 @@ async function runAnalysis(id){
   let si=0;const se=document.getElementById('a-step');
   const iv=setInterval(()=>{if(se&&si<steps.length)se.textContent=steps[si++];},700);
   try{
-    if(hasKeys()){
+    if(hasBackend()||hasKeys()){
       const reviews=await scrape(a.asin);
       const report=await analyse(reviews,a.asin);
       clearInterval(iv);
@@ -787,6 +796,12 @@ async function runAnalysis(id){
 }
 
 async function scrape(asin){
+  if(hasBackend()){
+    const r=await fetch(apiURL('/api/reviews/scrape'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({asin,country:'us'})});
+    if(!r.ok)throw new Error('Backend scrape error '+r.status);
+    const d=await r.json();
+    return d.reviews||d.data||[];
+  }
   const r=await fetch(`${CFG.scrapingEndpoint}?api_key=${CFG.scrapingKey}&asin=${asin}&country=us`);
   if(!r.ok)throw new Error('Scraping API error '+r.status);
   const d=await r.json();return d.reviews||d||[];
@@ -795,9 +810,17 @@ async function scrape(asin){
 async function analyse(reviews,asin){
   const txt=reviews.slice(0,200).map(r=>`[${r.rating||r.stars}/5] ${r.title||''}: ${r.body||r.text||r.review||''}`).join('\n');
   const prompt=`You are an expert Amazon market researcher. Analyse these ${reviews.length} reviews for ASIN ${asin}. Return ONLY valid JSON, no markdown.\n\nReviews:\n${txt}\n\nReturn this exact JSON structure:\n{"complaints":[{"label":"theme","pct":65,"fill":"fill-red"},{"label":"theme","pct":40,"fill":"fill-amber"},{"label":"theme","pct":25,"fill":"fill-blue"},{"label":"theme","pct":18,"fill":"fill-purple"},{"label":"theme","pct":12,"fill":"fill-red"}],"praise":[{"label":"theme","pct":70,"fill":"fill-green"},{"label":"theme","pct":55,"fill":"fill-green"},{"label":"theme","pct":40,"fill":"fill-blue"}],"copy":[{"label":"Bullet 1","text":"specific listing bullet"},{"label":"Bullet 2","text":"specific listing bullet"},{"label":"Bullet 3","text":"specific listing bullet"}],"swot":{"S":"strengths","W":"weaknesses","O":"your opportunity","T":"threats"}}\n\npct=1-100, fill must be fill-red/fill-amber/fill-blue/fill-purple/fill-green, use specific buyer language, return ONLY the JSON.`;
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+  if(hasBackend()){
+    const r=await fetch(apiURL('/api/reviews/analyze'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({asin,reviews,prompt})});
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||e.message||('Backend analyze error '+r.status));}
+    const d=await r.json();
+    if(d.report) return d.report;
+    if(d.complaints&&d.praise&&d.copy&&d.swot) return d;
+    throw new Error('Backend returned invalid report payload');
+  }
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.anthropicKey,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
   if(!r.ok){const e=await r.json();throw new Error(e.error?.message||'Claude API '+r.status);}
-  const d=await r.json();const t=d.content[0].text.trim();
+  const d=await r.json();const t=(d.content?.[0]?.text||'').trim();
   try{return JSON.parse(t);}catch{const m=t.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw new Error('Parse failed');}
 }
 
@@ -856,7 +879,7 @@ function doDelete(){asins=asins.filter(a=>a.id!==delId);saveAsins();cm('m-del');
 function om(id){document.getElementById(id).classList.add('open');}
 function cm(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
-function apiBar(){return`<div class="api-notice"><span style="font-size:18px;flex-shrink:0;">⚙️</span><div style="flex:1;font-size:13px;line-height:1.5;"><strong>Demo mode.</strong> Add your Anthropic & Scrapingdog API keys in <strong>Settings</strong> to enable live review scraping and AI analysis.</div><button class="config-btn" onclick="document.querySelector('[data-p=settings]').click()">Open Settings →</button></div>`;}
+function apiBar(){return`<div class="api-notice"><span style="font-size:18px;flex-shrink:0;">⚙️</span><div style="flex:1;font-size:13px;line-height:1.5;"><strong>Demo mode.</strong> For production, set a backend API URL (Railway works great) in <strong>Settings</strong>. You can still use direct keys for local testing.</div><button class="config-btn" onclick="document.querySelector('[data-p=settings]').click()">Open Settings →</button></div>`;}
 function updateSB(){const ct=document.getElementById('sb-ct');if(ct)ct.textContent=asins.length;const sb=document.getElementById('sb-sub');if(sb)sb.textContent=asins.length+' / 20 ASINs';}
 function toast(msg,type=''){
   const t=document.getElementById('toast');

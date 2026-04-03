@@ -1048,8 +1048,10 @@ footer {
 </footer>
 
 <script>
+const LANDING_CFG = { apiBase: window.REVIEWIQ_API_BASE || '' };
+
 // ── EMAIL SUBMIT ──
-function submitEmail(inputId, successId) {
+async function submitEmail(inputId, successId) {
   const input = document.getElementById(inputId);
   const success = document.getElementById(successId);
   const email = input.value.trim();
@@ -1058,8 +1060,22 @@ function submitEmail(inputId, successId) {
     setTimeout(() => input.style.borderColor = '', 1000);
     return;
   }
-  // In production: POST to your backend or Mailchimp/ConvertKit API
-  console.log('Email captured:', email);
+  try {
+    if (LANDING_CFG.apiBase) {
+      await fetch(LANDING_CFG.apiBase.replace(/\/$/, '') + '/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, source: inputId, ts: new Date().toISOString() })
+      });
+    } else {
+      const key = 'riq_waitlist';
+      const prev = JSON.parse(localStorage.getItem(key) || '[]');
+      prev.push({ email, source: inputId, ts: new Date().toISOString() });
+      localStorage.setItem(key, JSON.stringify(prev));
+    }
+  } catch (err) {
+    console.error('Waitlist capture failed', err);
+  }
   input.style.display = 'none';
   input.closest('.email-form').querySelector('button').style.display = 'none';
   success.style.display = 'block';
