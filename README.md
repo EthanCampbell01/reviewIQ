@@ -24,6 +24,8 @@ Paste a competitor's ASIN → ReviewIQ pulls every review → Claude AI clusters
 |------|-------------|
 | `reviewiq-app.html` | Full dashboard application — all pages, live analysis engine |
 | `reviewiq-landing.html` | Marketing landing page with animated demo and email capture |
+| `backend/server.js` | Express API for Railway/production proxy (scrape, analyze, copy, waitlist) |
+| `backend/RAILWAY.md` | Step-by-step Railway deployment guide for the backend service |
 
 ---
 
@@ -101,6 +103,29 @@ See the [full business plan](./BUSINESS_PLAN.md) for revenue projections and go-
 
 ---
 
+
+## Railway Backend (Recommended for production)
+
+A ready-to-deploy backend is included under `backend/` so API keys stay server-side and Stripe checkout can be created from the server.
+
+### Quick start
+
+```bash
+cd backend
+npm install
+npm start
+```
+
+Then set in the app Settings:
+- **Backend API Base URL** (`https://<your-railway-service>.up.railway.app`)
+- **Backend API Token** (if you configured `BACKEND_TOKEN`)
+
+The backend now exposes scrape/analyze/copy/waitlist plus Stripe checkout session creation endpoints.
+
+Use [`backend/.env.example`](./backend/.env.example) as your variable template.
+
+See full deploy steps in [`backend/RAILWAY.md`](./backend/RAILWAY.md).
+
 ## Demo Mode
 
 Both files work out of the box without API keys — they run in **demo mode** with realistic sample data (3 pre-loaded competitors in the tumbler/drinkware niche). Add API keys in Settings to switch to live mode.
@@ -109,9 +134,9 @@ Both files work out of the box without API keys — they run in **demo mode** wi
 
 ## Data & Privacy
 
-- API keys are stored **only in your browser's localStorage** — never transmitted to any server
-- Review data scraped is publicly available on Amazon product pages
-- No user data is collected or stored by this app
+- In demo mode, app settings/data are stored in browser localStorage
+- In backend mode, provider keys are kept server-side and never exposed to browser clients; backend token can be provided per browser session
+- Waitlist signups can persist to file storage or Supabase via backend configuration
 
 ---
 
@@ -120,7 +145,7 @@ Both files work out of the box without API keys — they run in **demo mode** wi
 - **Frontend:** Vanilla HTML/CSS/JS (zero dependencies, zero build step)
 - **AI:** Anthropic Claude API (`claude-sonnet-4-20250514`)
 - **Scraping:** Scrapingdog Amazon Reviews API
-- **Storage:** Browser localStorage (no backend required for MVP)
+- **Storage:** Browser localStorage (demo) + backend file/Supabase persistence (production)
 - **Fonts:** Syne + JetBrains Mono (Google Fonts)
 
 ---
