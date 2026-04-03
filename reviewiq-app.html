@@ -277,13 +277,23 @@ textarea.form-input{resize:vertical;min-height:110px;font-size:12px;line-height:
 
 <script>
 // ── CONFIG ──
-let CFG={anthropicKey:'',scrapingKey:'',stripeKey:'',scrapingEndpoint:'https://api.scrapingdog.com/amazon/reviews',emailAlerts:true,weeklyDigest:true,slackAlerts:false,alertThreshold:10};
-function loadCFG(){try{const s=localStorage.getItem('riq_cfg');if(s)CFG={...CFG,...JSON.parse(s)};}catch(e){}}
-function saveCFG(){localStorage.setItem('riq_cfg',JSON.stringify(CFG));}
+let CFG={anthropicKey:'',scrapingKey:'',stripeKey:'',backendBase:'',backendToken:'',scrapingEndpoint:'https://api.scrapingdog.com/amazon/reviews',emailAlerts:true,weeklyDigest:true,slackAlerts:false,alertThreshold:10};
+function loadCFG(){
+  try{const s=localStorage.getItem('riq_cfg');if(s)CFG={...CFG,...JSON.parse(s)};}catch(e){}
+  try{const t=sessionStorage.getItem('riq_backend_token');if(t)CFG.backendToken=t;}catch(e){}
+}
+function saveCFG(){
+  const safe={...CFG,backendToken:''};
+  localStorage.setItem('riq_cfg',JSON.stringify(safe));
+  if(CFG.backendToken)sessionStorage.setItem('riq_backend_token',CFG.backendToken);
+  else sessionStorage.removeItem('riq_backend_token');
+}
 function hasKeys(){return!!(CFG.anthropicKey&&CFG.scrapingKey);}
 function hasBackend(){return!!CFG.backendBase.trim();}
 function apiURL(path){return CFG.backendBase.replace(/\/$/,'')+path;}
 function apiHeaders(){const h={'Content-Type':'application/json'};if(CFG.backendToken)h.Authorization='Bearer '+CFG.backendToken;return h;}
+async function fetchTO(url,opts={},ms=12000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{...opts,signal:c.signal});}finally{clearTimeout(t);}}
+let BACKEND_READY=null;
 
 // ── SEED DATA ──
 const SEED=[
@@ -325,7 +335,7 @@ function renderDash(){
   const avg=sc.length?Math.round(sc.reduce((s,a)=>s+a.score,0)/sc.length):0;
   const rdy=asins.filter(a=>a.status==='ready').length;
   c.innerHTML=`
-    ${!hasKeys()?apiBar():''}
+    ${(!hasKeys()&&!hasBackend())?apiBar():''}
     <div class="stats-row">
       <div class="stat-card"><div class="sc-label">ASINs Tracked</div><div class="sc-value">${asins.length}</div><div class="sc-change change-up">↑ Growth plan · 20 max</div></div>
       <div class="stat-card"><div class="sc-label">Total Reviews Analysed</div><div class="sc-value">${tot.toLocaleString()}</div><div class="sc-change change-up">↑ ${asins.reduce((s,a)=>s+a.newR,0)} new this week</div></div>
@@ -486,7 +496,7 @@ async function genCopy(){
   try{
     let text='';
     if(hasBackend()){
-      const r=await fetch(apiURL('/api/copy/generate'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({brief,tone,type,prompt})});
+      const r=await fetchTO(apiURL('/api/copy/generate'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({brief,tone,type,prompt})},15000);
       if(!r.ok) throw new Error('Backend error '+r.status);
       const d=await r.json();
       text=d.text||d.output||'';
@@ -592,7 +602,8 @@ function renderGrowth(){
             <div class="settings-row"><div><div class="settings-label">Starter</div><div class="settings-sub">5 ASINs · weekly reports</div></div><span class="pill">$49/mo</span></div>
             <div class="settings-row"><div><div class="settings-label">Growth</div><div class="settings-sub">20 ASINs · alerts + digest</div></div><span class="pill good">$99/mo</span></div>
             <div class="settings-row"><div><div class="settings-label">Scale</div><div class="settings-sub">50 ASINs · API + team seats</div></div><span class="pill">$199/mo</span></div>
-            <button class="btn-primary" style="margin-top:14px;width:100%;justify-content:center;" onclick="startCheckout()">Launch Demo Checkout</button>
+            <div class="form-group" style="margin-top:12px;"><label class="form-label">Checkout plan</label><select id="co-plan" class="form-input" style="cursor:pointer;"><option value="growth">Growth — $99/mo</option><option value="starter">Starter — $49/mo</option><option value="scale">Scale — $199/mo</option></select></div>
+            <button class="btn-primary" style="margin-top:10px;width:100%;justify-content:center;" onclick="startCheckout()">Launch Stripe Checkout</button>
           </div>
         </div>
       </div>
@@ -610,7 +621,17 @@ function buildDigest(){
 }
 function regenDigest(){document.getElementById('digest-preview').textContent=buildDigest();toast('✓ Digest regenerated');}
 function copyDigest(){const txt=document.getElementById('digest-preview').textContent;navigator.clipboard.writeText(txt);toast('✓ Digest copied to clipboard');}
-function startCheckout(){toast(BIZ.stripeReady?'Redirecting to Stripe Checkout...':'Demo checkout launched. Add Stripe key in Settings for live billing.');}
+async function startCheckout(){
+  if(!hasBackend()){toast('Add Backend API Base URL in Settings first.','err');return;}
+  try{
+    const plan=(document.getElementById('co-plan')?.value)||'growth';
+    const r=await fetchTO(apiURL('/api/billing/create-checkout-session'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({plan})},15000);
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||('Checkout error '+r.status));
+    if(d.checkoutUrl){window.open(d.checkoutUrl,'_blank');toast('Opening Stripe Checkout...');return;}
+    throw new Error('Missing checkout URL');
+  }catch(e){toast('Checkout failed: '+e.message,'err');}
+}
 
 // ── SETTINGS ──
 function renderSettings(){
@@ -620,7 +641,7 @@ function renderSettings(){
     <div class="settings-section">
       <div class="settings-header">🔑 API Keys</div>
       <div class="settings-body">
-        <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Keys are stored only in your browser's local storage — never transmitted to ReviewIQ servers.</p>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">${hasBackend()?'Backend mode enabled: provider keys stay server-side. Backend token is kept only for this browser session.':'Demo/local mode: keys are stored in browser storage on this device.'}</p>
         <div class="form-group">
           <label class="form-label">Anthropic (Claude) API Key <span class="key-status">${CFG.anthropicKey?`<span class="ks-set">✓ Set</span>${mk(CFG.anthropicKey)}`:`<span class="ks-unset">✗ Not set</span>`}</span></label>
           <input id="k-ant" class="form-input" type="password" placeholder="sk-ant-api03-..." value="${CFG.anthropicKey}">
@@ -636,9 +657,22 @@ function renderSettings(){
           <input id="k-st" class="form-input" type="password" placeholder="pk_live_..." value="${CFG.stripeKey||''}">
           <div style="font-size:11px;color:var(--muted);margin-top:6px;">Optional now. Required to switch checkout from demo to live.</div>
         </div>
+        <div class="form-group">
+          <label class="form-label">Backend API Base URL</label>
+          <input id="k-be" class="form-input" placeholder="https://your-app.up.railway.app" value="${CFG.backendBase||''}">
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Recommended for production. Routes live scraping, Claude calls, and waitlist capture through your server.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Backend API Token (optional)</label>
+          <input id="k-bet" class="form-input" type="password" placeholder="Bearer token for your API" value="${CFG.backendToken||''}">
+        </div>
+        <div class="settings-row" style="padding-top:4px;">
+          <div><div class="settings-label">Backend Status</div><div class="settings-sub" id="be-status">${BACKEND_READY===null?'Not checked yet':BACKEND_READY?'Ready ✓':'Not ready ✗'}</div></div>
+          <button class="btn-secondary" style="font-size:11px;padding:6px 12px;" onclick="checkBackendStatus()">Check</button>
+        </div>
         <button class="btn-primary" onclick="saveKeys()">Save API Keys</button>
-        ${hasKeys()?`<button class="btn-danger" style="margin-left:10px;" onclick="clearKeys()">Clear</button>`:''}
-        ${hasKeys()?`<span style="color:var(--green);font-size:13px;margin-left:12px;">✓ Live mode active</span>`:`<span style="color:var(--amber);font-size:13px;margin-left:12px;">⚡ Demo mode</span>`}
+        ${(hasKeys()||hasBackend())?`<button class="btn-danger" style="margin-left:10px;" onclick="clearKeys()">Clear</button>`:''}
+        ${(hasBackend()&&BACKEND_READY===true)?`<span style="color:var(--green);font-size:13px;margin-left:12px;">✓ Backend mode active</span>`:hasKeys()?`<span style="color:var(--green);font-size:13px;margin-left:12px;">✓ Direct key mode active</span>`:`<span style="color:var(--amber);font-size:13px;margin-left:12px;">⚡ Demo mode</span>`}
       </div>
     </div>
     <div class="settings-section">
@@ -662,11 +696,26 @@ function saveKeys(){
   CFG.anthropicKey=document.getElementById('k-ant').value.trim();
   CFG.scrapingKey=document.getElementById('k-sc').value.trim();
   CFG.stripeKey=(document.getElementById('k-st')?.value||'').trim();
+  CFG.backendBase=(document.getElementById('k-be')?.value||'').trim();
+  CFG.backendToken=(document.getElementById('k-bet')?.value||'').trim();
   BIZ.stripeReady=CFG.stripeKey.startsWith('pk_');
+  BACKEND_READY=null;
   saveCFG(); saveBiz(); renderSettings();
-  toast(hasKeys()?'✓ API keys saved — live mode active':'Keys saved (add both keys to enable live mode)');
+  toast((hasKeys()||hasBackend())?'✓ Settings saved':'Settings saved (demo mode remains active)');
 }
-function clearKeys(){CFG.anthropicKey='';CFG.scrapingKey='';CFG.stripeKey='';BIZ.stripeReady=false;saveCFG();saveBiz();renderSettings();toast('Keys cleared');}
+function clearKeys(){CFG.anthropicKey='';CFG.scrapingKey='';CFG.stripeKey='';CFG.backendBase='';CFG.backendToken='';BIZ.stripeReady=false;sessionStorage.removeItem('riq_backend_token');saveCFG();saveBiz();renderSettings();toast('Keys cleared');}
+
+async function checkBackendStatus(){
+  if(!hasBackend()){BACKEND_READY=false;renderSettings();toast('Set Backend API Base URL first','err');return;}
+  try{
+    const r=await fetchTO(apiURL('/api/ready'),{headers:apiHeaders()},8000);
+    const d=await r.json().catch(()=>({}));
+    BACKEND_READY=!!(r.ok&&d.ok);
+    renderSettings();
+    if(BACKEND_READY) toast('Backend is ready ✓');
+    else toast('Backend not ready — check /api/ready','err');
+  }catch(e){BACKEND_READY=false;renderSettings();toast('Backend check failed: '+e.message,'err');}
+}
 function exportAll(){
   const rows=[['ASIN','Nickname','Reviews','Score','Top Complaint','Top Praise','Last Run']];
   asins.forEach(a=>rows.push([a.asin,a.nick,a.reviews,a.score||'',a.report?.complaints[0]?.label||'',a.report?.praise[0]?.label||'',a.lastRun]));
@@ -797,7 +846,7 @@ async function runAnalysis(id){
 
 async function scrape(asin){
   if(hasBackend()){
-    const r=await fetch(apiURL('/api/reviews/scrape'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({asin,country:'us'})});
+    const r=await fetchTO(apiURL('/api/reviews/scrape'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({asin,country:'us'})},20000);
     if(!r.ok)throw new Error('Backend scrape error '+r.status);
     const d=await r.json();
     return d.reviews||d.data||[];
@@ -811,7 +860,7 @@ async function analyse(reviews,asin){
   const txt=reviews.slice(0,200).map(r=>`[${r.rating||r.stars}/5] ${r.title||''}: ${r.body||r.text||r.review||''}`).join('\n');
   const prompt=`You are an expert Amazon market researcher. Analyse these ${reviews.length} reviews for ASIN ${asin}. Return ONLY valid JSON, no markdown.\n\nReviews:\n${txt}\n\nReturn this exact JSON structure:\n{"complaints":[{"label":"theme","pct":65,"fill":"fill-red"},{"label":"theme","pct":40,"fill":"fill-amber"},{"label":"theme","pct":25,"fill":"fill-blue"},{"label":"theme","pct":18,"fill":"fill-purple"},{"label":"theme","pct":12,"fill":"fill-red"}],"praise":[{"label":"theme","pct":70,"fill":"fill-green"},{"label":"theme","pct":55,"fill":"fill-green"},{"label":"theme","pct":40,"fill":"fill-blue"}],"copy":[{"label":"Bullet 1","text":"specific listing bullet"},{"label":"Bullet 2","text":"specific listing bullet"},{"label":"Bullet 3","text":"specific listing bullet"}],"swot":{"S":"strengths","W":"weaknesses","O":"your opportunity","T":"threats"}}\n\npct=1-100, fill must be fill-red/fill-amber/fill-blue/fill-purple/fill-green, use specific buyer language, return ONLY the JSON.`;
   if(hasBackend()){
-    const r=await fetch(apiURL('/api/reviews/analyze'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({asin,reviews,prompt})});
+    const r=await fetchTO(apiURL('/api/reviews/analyze'),{method:'POST',headers:apiHeaders(),body:JSON.stringify({asin,reviews,prompt})},25000);
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||e.message||('Backend analyze error '+r.status));}
     const d=await r.json();
     if(d.report) return d.report;

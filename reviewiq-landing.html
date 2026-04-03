@@ -1062,11 +1062,12 @@ async function submitEmail(inputId, successId) {
   }
   try {
     if (LANDING_CFG.apiBase) {
-      await fetch(LANDING_CFG.apiBase.replace(/\/$/, '') + '/api/waitlist', {
+      const r = await fetch(LANDING_CFG.apiBase.replace(/\/$/, '') + '/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, source: inputId, ts: new Date().toISOString() })
       });
+      if (!r.ok) throw new Error('waitlist request failed: ' + r.status);
     } else {
       const key = 'riq_waitlist';
       const prev = JSON.parse(localStorage.getItem(key) || '[]');
@@ -1075,9 +1076,20 @@ async function submitEmail(inputId, successId) {
     }
   } catch (err) {
     console.error('Waitlist capture failed', err);
+    input.style.borderColor = '#ff4d4d';
+    success.style.display = 'block';
+    success.style.color = '#ff4d4d';
+    success.style.borderColor = 'rgba(255,77,77,0.35)';
+    success.style.background = 'rgba(255,77,77,0.08)';
+    success.textContent = 'Signup failed. Please try again in a moment.';
+    return;
   }
   input.style.display = 'none';
   input.closest('.email-form').querySelector('button').style.display = 'none';
+  success.textContent = "✓ You're on the list. We'll be in touch within 24 hours.";
+  success.style.color = '';
+  success.style.borderColor = '';
+  success.style.background = '';
   success.style.display = 'block';
 }
 
