@@ -754,7 +754,7 @@ function buildReport(a){
     </div>
     <div class="rp-col">
       <div class="rp-col-title">// AI Listing Copy</div>
-      ${r.copy.map(co=>`<div class="copy-card"><div class="copy-card-label">${co.label}</div>${co.text}<div class="copy-card-actions"><button class="copy-mini-btn" onclick="navigator.clipboard.writeText('${co.text.replace(/'/g,"\\'")}');toast('✓ Copied')">📋 Copy</button><button class="copy-mini-btn" onclick="useInGen('${encodeURIComponent(co.text)}')">✍️ Refine</button></div></div>`).join('')}
+      ${r.copy.map(co=>{const t=co.text||'';return`<div class="copy-card"><div class="copy-card-label">${co.label||''}</div>${t}<div class="copy-card-actions"><button class="copy-mini-btn" onclick="navigator.clipboard.writeText('${t.replace(/'/g,"\\'")}');toast('✓ Copied')">📋 Copy</button><button class="copy-mini-btn" onclick="useInGen('${encodeURIComponent(t)}')">✍️ Refine</button></div></div>`;}).join('')}
     </div>
     <div class="rp-col">
       <div class="rp-col-title">// What Buyers Love</div>

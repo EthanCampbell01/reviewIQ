@@ -292,6 +292,10 @@ app.post('/api/reviews/analyze', rateLimit, auth, async (req, res) => {
       if (!m) throw new Error('Could not parse JSON report from model response');
       report = JSON.parse(m[0]);
     }
+    // Sanitize: ensure copy items always have string text
+    if (Array.isArray(report.copy)) {
+      report.copy = report.copy.map(c => ({ ...c, text: c.text != null ? String(c.text) : '' }));
+    }
     return res.json({ report });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'analysis failed', rid: req.rid });
