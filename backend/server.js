@@ -17,7 +17,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const REQUIRE_BACKEND_TOKEN = (process.env.REQUIRE_BACKEND_TOKEN || 'true').toLowerCase() === 'true';
 const WAITLIST_REQUIRE_AUTH = (process.env.WAITLIST_REQUIRE_AUTH || 'false').toLowerCase() === 'true';
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY || '';
 const BACKEND_TOKEN = process.env.BACKEND_TOKEN || '';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean);
@@ -184,30 +184,26 @@ async function persistWaitlist(entry) {
   return { mode: 'file', ...result };
 }
 
-async function callAnthropic(prompt, max_tokens = 1200) {
-  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY missing');
-  const r = await retryExternal(() => fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+async function callAnthropic(prompt) {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const r = await retryExternal(() => fetchWithTimeout(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens,
-      messages: [{ role: 'user', content: prompt }]
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 1400 }
     })
   }));
   const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || `Anthropic error ${r.status}`);
-  return data?.content?.[0]?.text || '';
+  if (!r.ok) throw new Error(data?.error?.message || `Gemini error ${r.status}`);
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 function readiness() {
   const stripeReady = !!(STRIPE_SECRET_KEY && STRIPE_PRICE_STARTER && STRIPE_PRICE_GROWTH && STRIPE_PRICE_SCALE);
   return {
-    anthropic: !!ANTHROPIC_API_KEY,
+    gemini: !!GEMINI_API_KEY,
     scraperapi: !!SCRAPERAPI_KEY,
     waitlistPersistence: hasSupabaseWaitlist() ? 'supabase' : 'file',
     stripe: stripeReady,
