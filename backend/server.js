@@ -18,7 +18,7 @@ const REQUIRE_BACKEND_TOKEN = (process.env.REQUIRE_BACKEND_TOKEN || 'true').toLo
 const WAITLIST_REQUIRE_AUTH = (process.env.WAITLIST_REQUIRE_AUTH || 'false').toLowerCase() === 'true';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const RAINFOREST_API_KEY = process.env.RAINFOREST_API_KEY || '';
+const APIFY_TOKEN = process.env.APIFY_TOKEN || '';
 const BACKEND_TOKEN = process.env.BACKEND_TOKEN || '';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean);
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
@@ -208,7 +208,7 @@ function readiness() {
   const stripeReady = !!(STRIPE_SECRET_KEY && STRIPE_PRICE_STARTER && STRIPE_PRICE_GROWTH && STRIPE_PRICE_SCALE);
   return {
     anthropic: !!ANTHROPIC_API_KEY,
-    rainforest: !!RAINFOREST_API_KEY,
+    apify: !!APIFY_TOKEN,
     waitlistPersistence: hasSupabaseWaitlist() ? 'supabase' : 'file',
     stripe: stripeReady,
     authTokenSet: !!BACKEND_TOKEN || !REQUIRE_BACKEND_TOKEN,
@@ -242,15 +242,32 @@ app.post('/api/reviews/scrape', rateLimit, auth, async (req, res) => {
   try {
     const { asin, country = 'us' } = req.body || {};
     if (!asin) return res.status(400).json({ error: 'asin is required', rid: req.rid });
-    if (!RAINFOREST_API_KEY) return res.status(500).json({ error: 'RAINFOREST_API_KEY missing', rid: req.rid });
+    if (!APIFY_TOKEN) return res.status(500).json({ error: 'APIFY_TOKEN missing', rid: req.rid });
 
     const domainMap = { us:'amazon.com', uk:'amazon.co.uk', de:'amazon.de', fr:'amazon.fr', ca:'amazon.ca', it:'amazon.it', es:'amazon.es', in:'amazon.in', jp:'amazon.co.jp', mx:'amazon.com.mx', br:'amazon.com.br', au:'amazon.com.au' };
-    const amazonDomain = domainMap[country] || 'amazon.com';
-    const url = `https://api.rainforestapi.com/request?api_key=${encodeURIComponent(RAINFOREST_API_KEY)}&type=reviews&asin=${encodeURIComponent(asin)}&amazon_domain=${encodeURIComponent(amazonDomain)}`;
-    const r = await retryExternal(() => fetchWithTimeout(url));
-    if (!r.ok) return res.status(502).json({ error: `Rainforest error ${r.status}`, rid: req.rid });
-    const d = await r.json();
-    return res.json({ reviews: d.reviews || [] });
+    const domain = domainMap[country] || 'amazon.com';
+    const amazonUrl = `https://www.${domain}/product-reviews/${encodeURIComponent(asin)}?reviewerType=all_reviews&sortBy=recent`;
+
+    // Apify run-sync: boots actor, scrapes, returns dataset items in one request
+    const apifyUrl = `https://api.apify.com/v2/acts/junglee~amazon-reviews-scraper/run-sync-get-dataset-items?token=${APIFY_TOKEN}&timeout=60&memory=256`;
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 65000);
+    let r;
+    try {
+      r = await fetch(apifyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startUrls: [{ url: amazonUrl }], maxReviews: 50 }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(t);
+    }
+
+    if (!r.ok) return res.status(502).json({ error: `Apify error ${r.status}`, rid: req.rid });
+    const items = await r.json();
+    const reviews = Array.isArray(items) ? items : [];
+    return res.json({ reviews });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'scrape failed', rid: req.rid });
   }
