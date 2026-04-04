@@ -17,7 +17,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const REQUIRE_BACKEND_TOKEN = (process.env.REQUIRE_BACKEND_TOKEN || 'true').toLowerCase() === 'true';
 const WAITLIST_REQUIRE_AUTH = (process.env.WAITLIST_REQUIRE_AUTH || 'false').toLowerCase() === 'true';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY || '';
 const BACKEND_TOKEN = process.env.BACKEND_TOKEN || '';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean);
@@ -185,25 +185,28 @@ async function persistWaitlist(entry) {
 }
 
 async function callAnthropic(prompt) {
-  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-  const r = await retryExternal(() => fetchWithTimeout(url, {
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY missing');
+  const r = await retryExternal(() => fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 1400 }
+      model: 'llama3-8b-8192',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1400
     })
   }));
   const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || `Gemini error ${r.status}`);
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!r.ok) throw new Error(data?.error?.message || `Groq error ${r.status}`);
+  return data?.choices?.[0]?.message?.content || '';
 }
 
 function readiness() {
   const stripeReady = !!(STRIPE_SECRET_KEY && STRIPE_PRICE_STARTER && STRIPE_PRICE_GROWTH && STRIPE_PRICE_SCALE);
   return {
-    gemini: !!GEMINI_API_KEY,
+    groq: !!GROQ_API_KEY,
     scraperapi: !!SCRAPERAPI_KEY,
     waitlistPersistence: hasSupabaseWaitlist() ? 'supabase' : 'file',
     stripe: stripeReady,
