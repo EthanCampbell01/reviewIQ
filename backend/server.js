@@ -18,7 +18,7 @@ const REQUIRE_BACKEND_TOKEN = (process.env.REQUIRE_BACKEND_TOKEN || 'true').toLo
 const WAITLIST_REQUIRE_AUTH = (process.env.WAITLIST_REQUIRE_AUTH || 'false').toLowerCase() === 'true';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const SCRAPINGDOG_API_KEY = process.env.SCRAPINGDOG_API_KEY || '';
+const RAINFOREST_API_KEY = process.env.RAINFOREST_API_KEY || '';
 const BACKEND_TOKEN = process.env.BACKEND_TOKEN || '';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean);
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
@@ -208,7 +208,7 @@ function readiness() {
   const stripeReady = !!(STRIPE_SECRET_KEY && STRIPE_PRICE_STARTER && STRIPE_PRICE_GROWTH && STRIPE_PRICE_SCALE);
   return {
     anthropic: !!ANTHROPIC_API_KEY,
-    scrapingdog: !!SCRAPINGDOG_API_KEY,
+    rainforest: !!RAINFOREST_API_KEY,
     waitlistPersistence: hasSupabaseWaitlist() ? 'supabase' : 'file',
     stripe: stripeReady,
     authTokenSet: !!BACKEND_TOKEN || !REQUIRE_BACKEND_TOKEN,
@@ -242,13 +242,15 @@ app.post('/api/reviews/scrape', rateLimit, auth, async (req, res) => {
   try {
     const { asin, country = 'us' } = req.body || {};
     if (!asin) return res.status(400).json({ error: 'asin is required', rid: req.rid });
-    if (!SCRAPINGDOG_API_KEY) return res.status(500).json({ error: 'SCRAPINGDOG_API_KEY missing', rid: req.rid });
+    if (!RAINFOREST_API_KEY) return res.status(500).json({ error: 'RAINFOREST_API_KEY missing', rid: req.rid });
 
-    const url = `https://api.scrapingdog.com/amazon/reviews?api_key=${encodeURIComponent(SCRAPINGDOG_API_KEY)}&asin=${encodeURIComponent(asin)}&country=${encodeURIComponent(country)}`;
+    const domainMap = { us:'amazon.com', uk:'amazon.co.uk', de:'amazon.de', fr:'amazon.fr', ca:'amazon.ca', it:'amazon.it', es:'amazon.es', in:'amazon.in', jp:'amazon.co.jp', mx:'amazon.com.mx', br:'amazon.com.br', au:'amazon.com.au' };
+    const amazonDomain = domainMap[country] || 'amazon.com';
+    const url = `https://api.rainforestapi.com/request?api_key=${encodeURIComponent(RAINFOREST_API_KEY)}&type=reviews&asin=${encodeURIComponent(asin)}&amazon_domain=${encodeURIComponent(amazonDomain)}`;
     const r = await retryExternal(() => fetchWithTimeout(url));
-    if (!r.ok) return res.status(502).json({ error: `Scrapingdog error ${r.status}`, rid: req.rid });
+    if (!r.ok) return res.status(502).json({ error: `Rainforest error ${r.status}`, rid: req.rid });
     const d = await r.json();
-    return res.json({ reviews: d.reviews || d || [] });
+    return res.json({ reviews: d.reviews || [] });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'scrape failed', rid: req.rid });
   }
