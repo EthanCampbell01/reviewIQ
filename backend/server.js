@@ -237,6 +237,16 @@ app.post('/api/waitlist', rateLimit, maybeAuth, async (req, res) => {
   }
 });
 
+app.get('/api/waitlist', auth, async (_req, res) => {
+  try {
+    await ensureDataFile();
+    const list = JSON.parse(await fs.readFile(WAITLIST_FILE, 'utf8'));
+    return res.json({ count: list.length, emails: list });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/reviews/scrape', rateLimit, auth, async (req, res) => {
   try {
     const { asin, country = 'us' } = req.body || {};
