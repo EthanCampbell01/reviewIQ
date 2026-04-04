@@ -75,7 +75,7 @@ app.use(cors({
 }));
 
 function auth(req, res, next) {
-  if (!BACKEND_TOKEN) return next();
+  if (!REQUIRE_BACKEND_TOKEN || !BACKEND_TOKEN) return next();
   const authHeader = req.headers.authorization || '';
   if (authHeader === `Bearer ${BACKEND_TOKEN}`) return next();
   return res.status(401).json({ error: 'Unauthorized', rid: req.rid });
