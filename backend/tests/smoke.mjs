@@ -26,7 +26,7 @@ const proc = spawn('node', ['server.js'], {
     PORT: String(PORT),
     NODE_ENV: 'test',
     BACKEND_TOKEN: 'test-token',
-    REQUIRE_BACKEND_TOKEN: 'false',
+    REQUIRE_BACKEND_TOKEN: 'true',
     WAITLIST_REQUIRE_AUTH: 'false'
   },
   stdio: ['ignore', 'pipe', 'pipe']
@@ -67,12 +67,21 @@ try {
   });
   assert(waitlistBad.status === 400, 'waitlist should reject invalid email');
 
+  // unauthenticated → 401
   const scrapeNoAuth = await fetch(`${base}/api/reviews/scrape`, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ asin:'B09WB35WBH' })
   });
-  assert(scrapeNoAuth.status === 401, 'scrape should require auth when BACKEND_TOKEN is set');
+  assert(scrapeNoAuth.status === 401, 'scrape should require auth when REQUIRE_BACKEND_TOKEN=true');
+
+  // authenticated but missing SCRAPINGDOG_API_KEY → 500 (key not set in test env)
+  const scrapeAuth = await fetch(`${base}/api/reviews/scrape`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json', Authorization:'Bearer test-token'},
+    body: JSON.stringify({ asin:'B09WB35WBH' })
+  });
+  assert(scrapeAuth.status === 500, 'scrape should 500 when SCRAPINGDOG_API_KEY is missing');
 
   console.log('smoke test passed');
 } finally {

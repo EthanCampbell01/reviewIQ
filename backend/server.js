@@ -246,7 +246,7 @@ app.post('/api/reviews/scrape', rateLimit, auth, async (req, res) => {
 
     const url = `https://api.scrapingdog.com/amazon/reviews?api_key=${encodeURIComponent(SCRAPINGDOG_API_KEY)}&asin=${encodeURIComponent(asin)}&country=${encodeURIComponent(country)}`;
     const r = await retryExternal(() => fetchWithTimeout(url));
-    if (!r.ok) return res.status(r.status).json({ error: `Scrapingdog error ${r.status}`, rid: req.rid });
+    if (!r.ok) return res.status(502).json({ error: `Scrapingdog error ${r.status}`, rid: req.rid });
     const d = await r.json();
     return res.json({ reviews: d.reviews || d || [] });
   } catch (e) {
