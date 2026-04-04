@@ -430,9 +430,9 @@ function renderCmpResults(){
     <div class="compare-col-asin">${x.asin}</div>
     <div class="score-ring" style="border-color:${col(x.score)};"><div class="score-ring-num" style="color:${col(x.score)};">${x.score}</div><div class="score-ring-lbl">SENTIMENT</div></div>
     <div class="rp-col-title">Top Complaints</div>
-    ${x.report.complaints.slice(0,3).map(co=>`<div class="citem"><div class="citem-top"><span class="citem-label">${co.label}</span><span class="citem-pct">${co.pct}%</span></div><div class="citem-bar"><div class="citem-fill ${co.fill}" style="width:${co.pct}%;"></div></div></div>`).join('')}
+    ${(()=>{const cs=x.report.complaints.slice(0,3);const cm=Math.max(...cs.map(c=>c.pct),1);return cs.map(co=>`<div class="citem"><div class="citem-top"><span class="citem-label">${co.label}</span><span class="citem-pct">${co.pct}%</span></div><div class="citem-bar"><div class="citem-fill ${co.fill}" style="width:${Math.round(co.pct/cm*100)}%;"></div></div></div>`).join('');})()}
     <div class="rp-col-title" style="margin-top:16px;">Top Praise</div>
-    ${x.report.praise.slice(0,2).map(p=>`<div class="citem"><div class="citem-top"><span class="citem-label">${p.label}</span><span class="citem-pct">${p.pct}%</span></div><div class="citem-bar"><div class="citem-fill ${p.fill}" style="width:${p.pct}%;"></div></div></div>`).join('')}
+    ${(()=>{const ps=x.report.praise.slice(0,2);const pm=Math.max(...ps.map(p=>p.pct),1);return ps.map(p=>`<div class="citem"><div class="citem-top"><span class="citem-label">${p.label}</span><span class="citem-pct">${p.pct}%</span></div><div class="citem-bar"><div class="citem-fill ${p.fill}" style="width:${Math.round(p.pct/pm*100)}%;"></div></div></div>`).join('');})()}
   </div>`;
   document.getElementById('cmp-out').innerHTML=`
     <div class="compare-results">${colHTML(a)}${colHTML(b)}</div>
@@ -778,19 +778,21 @@ function buildReport(a){
 
 function animBars(a){
   setTimeout(()=>{
-    a.report.complaints.forEach((c,i)=>animB(`br-${a.id}-c-${i}`,`pc-${a.id}-c-${i}`,c.pct,i*110));
-    a.report.praise.forEach((p,i)=>animB(`br-${a.id}-p-${i}`,`pc-${a.id}-p-${i}`,p.pct,i*110+250));
+    const cMax=Math.max(...a.report.complaints.map(c=>c.pct),1);
+    const pMax=Math.max(...a.report.praise.map(p=>p.pct),1);
+    a.report.complaints.forEach((c,i)=>animB(`br-${a.id}-c-${i}`,`pc-${a.id}-c-${i}`,c.pct,Math.round(c.pct/cMax*100),i*110));
+    a.report.praise.forEach((p,i)=>animB(`br-${a.id}-p-${i}`,`pc-${a.id}-p-${i}`,p.pct,Math.round(p.pct/pMax*100),i*110+250));
     const mx=Math.max(...(a.history||[1]),1);
     document.querySelectorAll(`#tc-${a.id} [data-h]`).forEach(el=>{setTimeout(()=>el.style.height=Math.round((parseInt(el.dataset.h)/mx)*64)+'px',100);});
   },150);
 }
 
-function animB(bid,pid,target,delay){
+function animB(bid,pid,display,barW,delay){
   setTimeout(()=>{
     const bar=document.getElementById(bid),pct=document.getElementById(pid);
-    if(bar)bar.style.width=target+'%';
+    if(bar)bar.style.width=barW+'%';
     if(!pct)return;
-    let n=0;const iv=setInterval(()=>{n=Math.min(n+2,target);pct.textContent=n+'%';if(n>=target)clearInterval(iv);},16);
+    let n=0;const iv=setInterval(()=>{n=Math.min(n+2,display);pct.textContent=n+'%';if(n>=display)clearInterval(iv);},16);
   },delay);
 }
 
