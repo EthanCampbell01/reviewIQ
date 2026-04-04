@@ -296,6 +296,12 @@ app.post('/api/reviews/analyze', rateLimit, auth, async (req, res) => {
     if (Array.isArray(report.copy)) {
       report.copy = report.copy.map(c => ({ ...c, text: c.text != null ? String(c.text) : '' }));
     }
+    // Detect placeholder/unfilled responses (model echoed template words)
+    const placeholders = new Set(['theme', 'strengths', 'weaknesses', 'opportunities', 'threats', 'specific listing bullet']);
+    const firstLabel = report.complaints?.[0]?.label?.toLowerCase().trim();
+    if (firstLabel && placeholders.has(firstLabel)) {
+      throw new Error('Model returned template placeholders instead of real analysis — retry');
+    }
     return res.json({ report });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'analysis failed', rid: req.rid });
